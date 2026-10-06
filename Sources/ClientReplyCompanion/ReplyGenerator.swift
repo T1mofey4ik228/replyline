@@ -4,21 +4,26 @@ import FoundationModels
 struct ReplyGenerator {
     func streamReply(
         for customerMessage: String,
+        context: String = "",
         instructions: String,
         provider: AIProvider = .apple,
         onUpdate: @escaping @MainActor @Sendable (String) -> Void
     ) async throws -> String {
+        let replyInstructions = instructions + "\n\nRespond only to the latest customer message. Any previous conversation is context only; do not answer it again. If there is no new request in the latest message, ask one short clarifying question."
+        let replyInput = context.isEmpty
+            ? "Latest customer message:\n\(customerMessage)"
+            : "Previous conversation (context only; do not reply to it):\n\(context)\n\nLatest customer message (reply only to this):\n\(customerMessage)"
         if provider == .chatGPT {
             return try await ChatGPTPlanClient.shared.streamText(
-                instructions: instructions,
-                input: customerMessage,
+                instructions: replyInstructions,
+                input: replyInput,
                 onUpdate: onUpdate
             )
         }
         try ensureModelAvailable()
 
-        let session = LanguageModelSession(instructions: instructions)
-        let responseStream = session.streamResponse(to: customerMessage)
+        let session = LanguageModelSession(instructions: replyInstructions)
+        let responseStream = session.streamResponse(to: replyInput)
         var latestText = ""
         for try await snapshot in responseStream {
             latestText = snapshot.content

@@ -116,12 +116,18 @@ final class CaptureManager: NSObject, ObservableObject {
     private let audioQueue = DispatchQueue(label: "client-reply.audio-capture")
     private var committedTranscript = ""
     private var currentUtterance = ""
+    private var lastRepliedTranscript = ""
     private var lastTranscriptUpdate = Date.distantPast
     private var shouldSummarizeAfterStop = false
 
     private struct SavedConversation: Codable {
         var transcript: String
         var summary: String
+        var lastRepliedTranscript: String?
+    }
+
+    var hasUnansweredText: Bool {
+        !unansweredText(after: lastRepliedTranscript, in: transcript).isEmpty
     }
 
     private var archiveURL: URL {
@@ -147,6 +153,7 @@ final class CaptureManager: NSObject, ObservableObject {
     func clear() {
         committedTranscript = ""
         currentUtterance = ""
+        lastRepliedTranscript = ""
         lastTranscriptUpdate = .distantPast
         transcript = ""
         draft = ""
@@ -161,22 +168,32 @@ final class CaptureManager: NSObject, ObservableObject {
     func prepareReply(instructions: String) {
         guard !isFinalizingTranscript,
               !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let conversationSnapshot = transcript
+        let previousSnapshot = lastRepliedTranscript
+        let message = unansweredText(after: previousSnapshot, in: conversationSnapshot)
+        guard !message.isEmpty else {
+            status = "Немає нових слів для відповіді"
+            return
+        }
         pauseRecognitionForReply()
         isGenerating = true
         draft = ""
         replyRevision = UUID()
         status = isCapturing ? "Слухання на паузі — готую відповідь…" : "Готую коротку відповідь на Mac…"
-        let message = transcript
+        let context = String(previousSnapshot.suffix(1_200))
         Task { [weak self] in
             guard let self else { return }
             do {
                 self.draft = try await ReplyGenerator().streamReply(
                     for: message,
+                    context: context,
                     instructions: instructions,
                     provider: AIProviderStore.shared.selected
                 ) { partialText in
                     self.draft = partialText
                 }
+                self.lastRepliedTranscript = self.transcript
+                self.persistCurrentConversation()
                 self.status = self.isRecognitionPaused
                     ? "Пауза: прочитай відповідь, потім натисни «Продовжити слухати»"
                     : "Чернетка готова — відредагуй її перед використанням"
@@ -334,12 +351,18 @@ final class CaptureManager: NSObject, ObservableObject {
               let saved = try? JSONDecoder().decode(SavedConversation.self, from: data) else { return }
         transcript = saved.transcript
         summary = saved.summary
+        // Archives written by older builds have no reply boundary; treat their existing text as handled.
+        lastRepliedTranscript = saved.lastRepliedTranscript ?? saved.transcript
         committedTranscript = saved.transcript
         status = saved.transcript.isEmpty ? "Готовий до розмови" : "Попередній діалог збережено"
     }
 
     func persistCurrentConversation() {
-        let saved = SavedConversation(transcript: transcript, summary: summary)
+        let saved = SavedConversation(
+            transcript: transcript,
+            summary: summary,
+            lastRepliedTranscript: lastRepliedTranscript
+        )
         guard let data = try? JSONEncoder().encode(saved) else { return }
         do {
             try FileManager.default.createDirectory(
@@ -363,6 +386,34 @@ final class CaptureManager: NSObject, ObservableObject {
         let leftWords = lhs.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
         let rightWords = rhs.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
         return zip(leftWords, rightWords).prefix { $0 == $1 }.count
+    }
+
+    private func unansweredText(after handledTranscript: String, in fullTranscript: String) -> String {
+        let full = fullTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !full.isEmpty else { return "" }
+        guard !handledTranscript.isEmpty else { return full }
+
+        func wordMatches(_ text: String) -> [(value: String, range: NSRange)] {
+            guard let regex = try? NSRegularExpression(pattern: "[\\p{L}\\p{N}]+") else { return [] }
+            return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).map { match in
+                let value = (text as NSString).substring(with: match.range).lowercased()
+                return (value, match.range)
+            }
+        }
+
+        let handledWords = wordMatches(handledTranscript).map(\.value)
+        let fullWords = wordMatches(full)
+        guard !handledWords.isEmpty,
+              fullWords.count > handledWords.count,
+              Array(fullWords.prefix(handledWords.count).map(\.value)) == handledWords,
+              let lastHandledWord = fullWords.dropFirst(handledWords.count - 1).first else {
+            return ""
+        }
+
+        let nsFull = full as NSString
+        let suffixRange = NSRange(location: NSMaxRange(lastHandledWord.range), length: nsFull.length - NSMaxRange(lastHandledWord.range))
+        return nsFull.substring(with: suffixRange)
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     }
 
     private func startMicrophone() async throws {

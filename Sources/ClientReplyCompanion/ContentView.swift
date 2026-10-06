@@ -293,7 +293,7 @@ struct ContentView: View {
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(teal)
                 }
                 .buttonStyle(.plain)
-                .disabled(capture.transcript.isEmpty || capture.isFinalizingTranscript || capture.isGenerating || capture.isSummarizing)
+                .disabled(!capture.hasUnansweredText || capture.isFinalizingTranscript || capture.isGenerating || capture.isSummarizing)
             }
         }
     }
