@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>ClientReplyCompanion</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.replyline.companion</string>
+	<key>CFBundleName</key>
+	<string>Replyline</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Replyline uses the Mac microphone to transcribe customer conversations, including iPhone calls on speakerphone.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Replyline captures meeting audio from this Mac for on-device transcription. Audio is not sent off the Mac.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>macOS requires ScreenCaptureKit access to capture meeting audio. Replyline processes audio only and does not record or save screen video.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Replyline transcribes English conversation audio on this Mac to draft a reply.</string>
+</dict>
+</plist>

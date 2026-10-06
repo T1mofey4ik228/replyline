@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+Replyline.app/
+.DS_Store
+
+# Local credentials and captured conversation data must never be published.
+*.auth.json
+conversation.json
